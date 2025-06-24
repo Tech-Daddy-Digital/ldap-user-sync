@@ -1,0 +1,15 @@
+# Core dependencies for LDAP User Sync
+ldap3>=2.9.1
+PyYAML>=6.0
+
+# SSL certificate handling
+cryptography>=3.4.8
+
+# JKS keystore support (optional)
+pyjks>=20.0.0
+
+# Development and testing dependencies (optional)
+# pytest>=7.0.0
+# pytest-cov>=4.0.0
+# flake8>=5.0.0
+# black>=22.0.0

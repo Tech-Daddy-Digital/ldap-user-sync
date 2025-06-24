@@ -1,0 +1,87 @@
+# Comprehensive test configuration that exercises all features
+
+ldap:
+  server_url: "ldaps://test.example.com:636"
+  bind_dn: "CN=SyncService,OU=Service Accounts,DC=test,DC=example,DC=com"
+  bind_password: "ldap_password"
+  user_base_dn: "OU=Users,DC=test,DC=example,DC=com"
+  user_filter: "(&(objectClass=person)(!(userAccountControl:1.2.840.113556.1.4.803:=2)))"
+  attributes:
+    - "cn"
+    - "givenName" 
+    - "sn"
+    - "mail"
+    - "sAMAccountName"
+    - "employeeID"
+
+vendor_apps:
+  # JSON API with Basic Auth
+  - name: "JsonVendor"
+    module: "json_vendor"
+    base_url: "https://api.jsonvendor.com/v2"
+    auth:
+      method: "basic"
+      username: "api_user"
+      password: "json_password"
+    format: "json"
+    verify_ssl: true
+    truststore_file: "/etc/ssl/certs/ca-bundle.pem"
+    truststore_type: "PEM"
+    groups:
+      - ldap_group: "CN=JsonApp_Users,OU=Groups,DC=test,DC=example,DC=com"
+        vendor_group: "standard_users"
+      - ldap_group: "CN=JsonApp_Admins,OU=Groups,DC=test,DC=example,DC=com"
+        vendor_group: "administrators"
+
+  # XML API with Bearer Token
+  - name: "XmlVendor"
+    module: "xml_vendor"
+    base_url: "https://api.xmlvendor.com/soap"
+    auth:
+      method: "token"
+      token: "xml_bearer_token"
+    format: "xml"
+    verify_ssl: true
+    groups:
+      - ldap_group: "CN=XmlApp_Users,OU=Groups,DC=test,DC=example,DC=com"
+        vendor_group: "XmlUsersGroupID456"
+
+  # OAuth2 Vendor (future capability)
+  - name: "OAuth2Vendor"
+    module: "oauth2_vendor" 
+    base_url: "https://api.oauth2vendor.com/v1"
+    auth:
+      method: "oauth2"
+      client_id: "oauth_client_id"
+      client_secret: "oauth_client_secret"
+      token_url: "https://api.oauth2vendor.com/oauth/token"
+    format: "json"
+    verify_ssl: false  # For testing environments
+    groups:
+      - ldap_group: "CN=OAuth2App_Users,OU=Groups,DC=test,DC=example,DC=com"
+        vendor_group: "oauth_users"
+
+logging:
+  level: "DEBUG"
+  log_dir: "test_logs"
+  rotation: "midnight"
+  retention_days: 14
+
+error_handling:
+  max_retries: 5
+  retry_wait_seconds: 10
+  max_errors_per_vendor: 3
+
+notifications:
+  enable_email: true
+  email_on_failure: true
+  email_on_success: true
+  smtp_server: "smtp.test.example.com"
+  smtp_port: 25
+  smtp_tls: false
+  smtp_username: "ldap-sync@test.example.com"
+  smtp_password: "smtp_password"
+  email_from: "LDAP Sync System <ldap-sync@test.example.com>"
+  email_to:
+    - "it-admins@test.example.com"
+    - "security-team@test.example.com"

@@ -1,0 +1,19 @@
+# Minimal configuration for testing/development
+# This config has the minimum required fields to pass validation
+
+ldap:
+  server_url: "ldap://localhost:389"
+  bind_dn: "CN=test,DC=test,DC=local"
+  bind_password: "testpass"
+
+vendor_apps:
+  - name: "TestVendor"
+    module: "test_vendor"
+    base_url: "http://localhost:8080/api"
+    auth:
+      method: "basic"
+      username: "testuser"
+      password: "testpass"
+    groups:
+      - ldap_group: "CN=TestGroup,DC=test,DC=local"
+        vendor_group: "test_group"

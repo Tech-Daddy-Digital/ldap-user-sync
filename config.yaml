@@ -1,0 +1,136 @@
+# LDAP User Sync Configuration
+# This is the main configuration file for the LDAP to Vendor Application User Sync system.
+# See SPEC.md for detailed documentation of all configuration options.
+
+# LDAP server configuration
+ldap:
+  # LDAP server URL - use ldaps:// for SSL or ldap:// for plain text
+  server_url: "ldaps://ldap.example.com:636"
+  
+  # Service account credentials for binding to LDAP
+  bind_dn: "CN=LDAPSyncService,OU=Service Accounts,OU=Users,DC=example,DC=com"
+  bind_password: "your-ldap-password-here"  # Can be overridden with LDAP_BIND_PASSWORD env var
+  
+  # Base DN for user searches (optional - will be derived from bind_dn if not specified)
+  user_base_dn: "OU=Users,DC=example,DC=com"
+  
+  # LDAP filter for user objects (default: "(objectClass=person)")
+  user_filter: "(objectClass=person)"
+  
+  # User attributes to retrieve from LDAP
+  attributes:
+    - "cn"              # Common name
+    - "givenName"       # First name
+    - "sn"              # Last name (surname)
+    - "mail"            # Email address
+    - "sAMAccountName"  # Username (Active Directory)
+    # - "uid"           # Username (Generic LDAP)
+    # - "employeeID"    # Employee ID (if needed)
+
+# Vendor applications configuration
+vendor_apps:
+  # Example Vendor App 1 - JSON API with Basic Auth
+  - name: "VendorApp1"
+    module: "vendor_app1"  # Python module name in ldap_sync/vendors/
+    base_url: "https://api.vendorapp1.com/v1"
+    
+    # Authentication configuration
+    auth:
+      method: "basic"
+      username: "api_user1"
+      password: "vendor1-password"  # Can be overridden with VENDORAPP1_PASSWORD env var
+    
+    # Data format for API requests/responses
+    format: "json"  # or "xml"
+    
+    # SSL verification (default: true)
+    verify_ssl: true
+    
+    # Custom SSL certificates (optional)
+    # truststore_file: "/path/to/truststore.jks"
+    # truststore_password: "changeit"
+    # truststore_type: "JKS"  # or "PKCS12" or "PEM"
+    
+    # Client certificate for mutual TLS (optional)
+    # keystore_file: "/path/to/client_cert.p12"
+    # keystore_password: "pkcs12-password"
+    # keystore_type: "PKCS12"
+    
+    # Group mappings (LDAP group to vendor group)
+    groups:
+      - ldap_group: "CN=App1_Basic_Users,OU=Groups,DC=example,DC=com"
+        vendor_group: "basic_users"
+      - ldap_group: "CN=App1_Admins,OU=Groups,DC=example,DC=com"
+        vendor_group: "administrators"
+  
+  # Example Vendor App 2 - XML API with Bearer Token
+  - name: "VendorApp2"
+    module: "vendor_app2"
+    base_url: "https://api.vendorapp2.com/rest"
+    
+    auth:
+      method: "token"
+      token: "your-bearer-token-here"  # Can be overridden with VENDORAPP2_TOKEN env var
+    
+    format: "xml"
+    verify_ssl: true
+    
+    groups:
+      - ldap_group: "CN=App2_Users,OU=Groups,DC=example,DC=com"
+        vendor_group: "App2UsersGroupID123"
+
+# Logging configuration
+logging:
+  # Log level: DEBUG, INFO, WARNING, ERROR
+  level: "INFO"
+  
+  # Directory for log files (relative to application root)
+  log_dir: "logs"
+  
+  # Log rotation: "daily" or "midnight"
+  rotation: "daily"
+  
+  # Number of days to retain log files
+  retention_days: 7
+
+# Error handling and retry configuration
+error_handling:
+  # Maximum number of retries for network operations
+  max_retries: 3
+  
+  # Seconds to wait between retry attempts
+  retry_wait_seconds: 5
+  
+  # Maximum errors allowed per vendor before aborting that vendor's sync
+  max_errors_per_vendor: 5
+
+# Email notification configuration
+notifications:
+  # Enable/disable email notifications
+  enable_email: true
+  
+  # Send notifications on sync failures
+  email_on_failure: true
+  
+  # Send notifications on successful sync (optional - not implemented yet)
+  email_on_success: false
+  
+  # SMTP server configuration
+  smtp_server: "smtp.example.com"
+  smtp_port: 587
+  smtp_tls: true
+  
+  # SMTP authentication (if required)
+  smtp_username: "alerts@example.com"
+  smtp_password: "smtp-password"  # Can be overridden with SMTP_PASSWORD env var
+  
+  # Email sender and recipients
+  email_from: "LDAP Sync <alerts@example.com>"
+  email_to:
+    - "admin1@example.com"
+    - "admin2@example.com"
+    - "ldap-admins@example.com"
+
+# Development/Testing Options (optional)
+# dry_run: false  # When true, log what would be done but don't make changes
+# debug_mode: false  # Enable additional debug logging
