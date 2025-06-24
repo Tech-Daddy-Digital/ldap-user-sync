@@ -65,28 +65,28 @@ This document outlines the implementation phases for the LDAP to Vendor Applicat
 ## Phase 3: Vendor API Framework
 
 ### 3.1 Base Vendor API Class
-- [ ] Implement `VendorAPIBase` in `vendors/base.py`:
-  - [ ] Initialize with vendor configuration
-  - [ ] HTTP client setup using `http.client`
-  - [ ] SSL context creation and certificate handling
-  - [ ] Authentication method abstraction (Basic, Token, OAuth2)
-  - [ ] Request/response helper methods
-  - [ ] JSON/XML format support
-- [ ] Define abstract methods for vendor operations:
-  - [ ] `get_group_members(group_cfg)`
-  - [ ] `add_user_to_group(group_cfg, user_info)`
-  - [ ] `remove_user_from_group(group_cfg, user_identifier)`
-  - [ ] `update_user(user_identifier, user_info)`
-  - [ ] `authenticate()` - Optional token/session setup
+- [x] Implement `VendorAPIBase` in `vendors/base.py`:
+  - [x] Initialize with vendor configuration
+  - [x] HTTP client setup using `http.client`
+  - [x] SSL context creation and certificate handling
+  - [x] Authentication method abstraction (Basic, Token, OAuth2)
+  - [x] Request/response helper methods
+  - [x] JSON/XML format support
+- [x] Define abstract methods for vendor operations:
+  - [x] `get_group_members(group_cfg)`
+  - [x] `add_user_to_group(group_cfg, user_info)`
+  - [x] `remove_user_from_group(group_cfg, user_identifier)`
+  - [x] `update_user(user_identifier, user_info)`
+  - [x] `authenticate()` - Optional token/session setup
 
 ### 3.2 SSL/Certificate Support
-- [ ] Implement certificate handling:
-  - [ ] PEM certificate loading
-  - [ ] JKS truststore support with `pyjks`
-  - [ ] PKCS#12 support with `cryptography`
-  - [ ] Client certificate authentication
-  - [ ] SSL context configuration
-- [ ] Test certificate scenarios
+- [x] Implement certificate handling:
+  - [x] PEM certificate loading
+  - [x] JKS truststore support with `pyjks`
+  - [x] PKCS#12 support with `cryptography`
+  - [x] Client certificate authentication
+  - [x] SSL context configuration
+- [x] Test certificate scenarios
 
 ### 3.3 Authentication Methods
 - [ ] HTTP Basic Authentication implementation

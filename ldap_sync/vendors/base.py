@@ -217,19 +217,139 @@ class VendorAPIBase(ABC):
                 credentials = base64.b64encode(f"{username}:{password}".encode()).decode()
                 self.auth_headers['Authorization'] = f"Basic {credentials}"
                 logger.debug(f"Configured Basic authentication for {self.name}")
+            else:
+                logger.error(f"Basic auth configured but missing username or password for {self.name}")
         
-        elif auth_method == 'token':
+        elif auth_method == 'token' or auth_method == 'bearer':
             token = self.auth_config.get('token')
             if token:
                 self.auth_headers['Authorization'] = f"Bearer {token}"
                 logger.debug(f"Configured Bearer token authentication for {self.name}")
+            else:
+                logger.error(f"Token auth configured but missing token for {self.name}")
         
         elif auth_method == 'oauth2':
-            # OAuth2 will be handled in authenticate() method
-            logger.debug(f"OAuth2 authentication configured for {self.name}")
+            # OAuth2 configuration validation
+            client_id = self.auth_config.get('client_id')
+            client_secret = self.auth_config.get('client_secret')
+            token_url = self.auth_config.get('token_url')
+            
+            if not all([client_id, client_secret, token_url]):
+                logger.error(f"OAuth2 auth configured but missing required fields (client_id, client_secret, token_url) for {self.name}")
+            else:
+                logger.debug(f"OAuth2 authentication configured for {self.name}")
+                # OAuth2 tokens will be obtained in authenticate() method
+        
+        elif auth_method == 'mtls' or auth_method == 'mutual_tls':
+            # Mutual TLS uses client certificates - already handled in SSL setup
+            logger.debug(f"Mutual TLS authentication configured for {self.name}")
         
         else:
-            logger.warning(f"Unknown authentication method '{auth_method}' for {self.name}")
+            if auth_method:
+                logger.warning(f"Unknown authentication method '{auth_method}' for {self.name}")
+            else:
+                logger.debug(f"No authentication method configured for {self.name}")
+    
+    def _oauth2_get_token(self) -> bool:
+        """
+        Retrieve OAuth2 access token using client credentials flow.
+        
+        Returns:
+            True if token was successfully obtained
+        """
+        auth_method = self.auth_config.get('method', '').lower()
+        if auth_method != 'oauth2':
+            return True  # Not OAuth2, so no token needed
+        
+        client_id = self.auth_config.get('client_id')
+        client_secret = self.auth_config.get('client_secret')
+        token_url = self.auth_config.get('token_url')
+        scope = self.auth_config.get('scope', '')
+        
+        if not all([client_id, client_secret, token_url]):
+            logger.error(f"OAuth2 configuration incomplete for {self.name}")
+            return False
+        
+        try:
+            # Parse token URL
+            from urllib.parse import urlparse
+            parsed_token_url = urlparse(token_url)
+            
+            # Create temporary connection for token request
+            if parsed_token_url.scheme == 'https':
+                token_conn = HTTPSConnection(parsed_token_url.netloc, context=self.ssl_context, timeout=30)
+            else:
+                token_conn = HTTPConnection(parsed_token_url.netloc, timeout=30)
+            
+            # Prepare token request
+            token_data = {
+                'grant_type': 'client_credentials',
+                'client_id': client_id,
+                'client_secret': client_secret
+            }
+            
+            if scope:
+                token_data['scope'] = scope
+            
+            # URL encode the data
+            from urllib.parse import urlencode
+            token_body = urlencode(token_data)
+            
+            token_headers = {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Accept': 'application/json'
+            }
+            
+            logger.debug(f"Requesting OAuth2 token for {self.name}")
+            token_conn.request('POST', parsed_token_url.path or '/', token_body, token_headers)
+            
+            response = token_conn.getresponse()
+            response_data = response.read().decode('utf-8')
+            
+            if response.status == 200:
+                try:
+                    token_response = json.loads(response_data)
+                    access_token = token_response.get('access_token')
+                    
+                    if access_token:
+                        self.auth_headers['Authorization'] = f"Bearer {access_token}"
+                        
+                        # Store token expiry if provided
+                        expires_in = token_response.get('expires_in')
+                        if expires_in:
+                            import time
+                            self._token_expires_at = time.time() + int(expires_in) - 60  # 60 second buffer
+                        
+                        logger.info(f"Successfully obtained OAuth2 token for {self.name}")
+                        return True
+                    else:
+                        logger.error(f"OAuth2 response missing access_token for {self.name}")
+                        return False
+                        
+                except json.JSONDecodeError as e:
+                    logger.error(f"Invalid JSON in OAuth2 token response for {self.name}: {e}")
+                    return False
+            else:
+                logger.error(f"OAuth2 token request failed for {self.name}: {response.status} {response.reason}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"OAuth2 token request error for {self.name}: {e}")
+            return False
+        
+        finally:
+            try:
+                token_conn.close()
+            except:
+                pass
+    
+    def _is_oauth2_token_valid(self) -> bool:
+        """Check if OAuth2 token is still valid."""
+        if not hasattr(self, '_token_expires_at'):
+            return False
+        
+        import time
+        return time.time() < self._token_expires_at
     
     def _get_connection(self) -> Union[HTTPSConnection, HTTPConnection]:
         """Get or create HTTP connection."""
@@ -283,39 +403,60 @@ class VendorAPIBase(ABC):
                 request_body = self._dict_to_xml(body)
                 request_headers['Content-Type'] = 'application/xml'
         
-        # Make request
-        try:
-            conn = self._get_connection()
-            
-            logger.debug(f"Making {method} request to {self.host}{full_path}")
-            conn.request(method, full_path, request_body, request_headers)
-            
-            response = conn.getresponse()
-            response_data = response.read().decode('utf-8')
-            
-            logger.debug(f"Response status: {response.status} {response.reason}")
-            
-            # Handle HTTP errors
-            if response.status >= 400:
-                if response.status == 401:
-                    raise VendorAuthenticationError(f"Authentication failed for {self.name}")
+        # Make request with automatic OAuth2 token refresh
+        max_auth_retries = 1
+        for auth_attempt in range(max_auth_retries + 1):
+            try:
+                conn = self._get_connection()
+                
+                logger.debug(f"Making {method} request to {self.host}{full_path}")
+                conn.request(method, full_path, request_body, request_headers)
+                
+                response = conn.getresponse()
+                response_data = response.read().decode('utf-8')
+                
+                logger.debug(f"Response status: {response.status} {response.reason}")
+                
+                # Handle HTTP errors
+                if response.status >= 400:
+                    if response.status == 401:
+                        # Handle authentication error
+                        auth_method = self.auth_config.get('method', '').lower()
+                        
+                        # For OAuth2, try to refresh token once
+                        if auth_method == 'oauth2' and auth_attempt < max_auth_retries:
+                            logger.info(f"401 error received, attempting to refresh OAuth2 token for {self.name}")
+                            if self._oauth2_get_token():
+                                # Update headers with new token and retry
+                                request_headers.update(self.auth_headers)
+                                continue
+                        
+                        raise VendorAuthenticationError(f"Authentication failed for {self.name}")
+                    else:
+                        raise VendorAPIError(f"HTTP {response.status}: {response.reason}")
+                
+                # Parse response
+                if self.format == 'json':
+                    return json.loads(response_data) if response_data else {}
+                elif self.format == 'xml':
+                    return self._xml_to_dict(response_data) if response_data else {}
                 else:
-                    raise VendorAPIError(f"HTTP {response.status}: {response.reason}")
-            
-            # Parse response
-            if self.format == 'json':
-                return json.loads(response_data) if response_data else {}
-            elif self.format == 'xml':
-                return self._xml_to_dict(response_data) if response_data else {}
-            else:
-                return {'raw': response_data}
+                    return {'raw': response_data}
+                    
+            except (VendorAPIError, VendorAuthenticationError):
+                # If this was our last auth attempt, re-raise
+                if auth_attempt >= max_auth_retries:
+                    raise
+                # Otherwise continue to next auth attempt
+            except (ConnectionError, OSError) as e:
+                raise VendorAPIError(f"Connection error to {self.name}: {e}")
+            except json.JSONDecodeError as e:
+                raise VendorAPIError(f"Invalid JSON response from {self.name}: {e}")
+            except Exception as e:
+                raise VendorAPIError(f"Request failed for {self.name}: {e}")
         
-        except (ConnectionError, OSError) as e:
-            raise VendorAPIError(f"Connection error to {self.name}: {e}")
-        except json.JSONDecodeError as e:
-            raise VendorAPIError(f"Invalid JSON response from {self.name}: {e}")
-        except Exception as e:
-            raise VendorAPIError(f"Request failed for {self.name}: {e}")
+        # Should not reach here
+        raise VendorAPIError(f"Request failed after {max_auth_retries + 1} attempts")
     
     def _dict_to_xml(self, data: Dict) -> str:
         """Convert dictionary to basic XML (can be overridden by vendor modules)."""
@@ -348,15 +489,37 @@ class VendorAPIBase(ABC):
     
     # Abstract methods that vendor modules must implement
     
-    @abstractmethod
     def authenticate(self) -> bool:
         """
         Perform any additional authentication steps (e.g., OAuth2 token retrieval).
         
+        This default implementation handles OAuth2 client credentials flow.
+        Vendor modules can override this method for custom authentication flows.
+        
         Returns:
             True if authentication successful
         """
-        pass
+        auth_method = self.auth_config.get('method', '').lower()
+        
+        if auth_method == 'oauth2':
+            # Check if we need to get or refresh the OAuth2 token
+            if not hasattr(self, '_token_expires_at') or not self._is_oauth2_token_valid():
+                return self._oauth2_get_token()
+            else:
+                logger.debug(f"OAuth2 token still valid for {self.name}")
+                return True
+        
+        elif auth_method in ['basic', 'token', 'bearer', 'mtls', 'mutual_tls']:
+            # These auth methods are handled in _setup_authentication
+            return True
+        
+        elif not auth_method:
+            # No authentication required
+            return True
+        
+        else:
+            logger.warning(f"Unknown authentication method '{auth_method}' for {self.name}")
+            return False
     
     @abstractmethod
     def get_group_members(self, group_cfg: Dict[str, Any]) -> List[Dict[str, Any]]:
