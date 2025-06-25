@@ -1,0 +1,110 @@
+# Docker Compose for testing LDAP User Sync
+version: '3.8'
+
+services:
+  # LDAP User Sync application
+  ldap-user-sync:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ldap-user-sync-test
+    environment:
+      # LDAP Configuration
+      - LDAP_SERVER_URL=ldap://test-ldap:389
+      - LDAP_BIND_DN=cn=admin,dc=example,dc=com
+      - LDAP_BIND_PASSWORD=admin
+      - LDAP_USER_BASE_DN=ou=users,dc=example,dc=com
+      - LDAP_USER_FILTER=(objectClass=person)
+      
+      # Vendor Configuration
+      - VENDOR1_NAME=TestVendor1
+      - VENDOR1_MODULE=vendor_app1
+      - VENDOR1_BASE_URL=http://mock-api:8080/api/v1
+      - VENDOR1_AUTH_METHOD=basic
+      - VENDOR1_USERNAME=testuser
+      - VENDOR1_PASSWORD=testpass
+      - VENDOR1_FORMAT=json
+      - VENDOR1_VERIFY_SSL=false
+      - VENDOR1_GROUP1_LDAP=cn=testgroup,ou=groups,dc=example,dc=com
+      - VENDOR1_GROUP1_VENDOR=test-group
+      
+      # Logging
+      - LOG_LEVEL=DEBUG
+      - LOG_DIR=/app/logs
+      
+      # Error Handling
+      - MAX_RETRIES=2
+      - RETRY_WAIT_SECONDS=2
+      - MAX_ERRORS_PER_VENDOR=5
+      
+      # Notifications (disabled for testing)
+      - ENABLE_EMAIL_NOTIFICATIONS=false
+      - EMAIL_ON_FAILURE=false
+      - EMAIL_ON_SUCCESS=false
+    volumes:
+      - ./config.yaml.template:/app/config.yaml:ro
+      - test-logs:/app/logs
+    depends_on:
+      - test-ldap
+      - mock-api
+    networks:
+      - ldap-sync-test
+    command: ["python", "-m", "ldap_sync.main"]
+
+  # Test LDAP server
+  test-ldap:
+    image: osixia/openldap:1.5.0
+    container_name: test-ldap-server
+    environment:
+      - LDAP_ORGANISATION=Example Corp
+      - LDAP_DOMAIN=example.com
+      - LDAP_ADMIN_PASSWORD=admin
+      - LDAP_CONFIG_PASSWORD=config
+      - LDAP_RFC2307BIS_SCHEMA=false
+      - LDAP_BACKEND=mdb
+      - LDAP_TLS=false
+      - LDAP_REPLICATION=false
+    volumes:
+      - test-ldap-data:/var/lib/ldap
+      - test-ldap-config:/etc/ldap/slapd.d
+    ports:
+      - "389:389"
+    networks:
+      - ldap-sync-test
+
+  # Mock API server for testing vendor integration
+  mock-api:
+    image: mockserver/mockserver:5.15.0
+    container_name: mock-vendor-api
+    environment:
+      - MOCKSERVER_PROPERTY_FILE=/config/mockserver.properties
+      - MOCKSERVER_INITIALIZATION_JSON_PATH=/config/expectations.json
+    volumes:
+      - ./test/mock-api-config:/config:ro
+    ports:
+      - "8080:1080"
+    networks:
+      - ldap-sync-test
+
+  # LDAP admin interface (optional)
+  ldap-admin:
+    image: osixia/phpldapadmin:0.9.0
+    container_name: test-ldap-admin
+    environment:
+      - PHPLDAPADMIN_LDAP_HOSTS=test-ldap
+      - PHPLDAPADMIN_HTTPS=false
+    ports:
+      - "8081:80"
+    depends_on:
+      - test-ldap
+    networks:
+      - ldap-sync-test
+
+volumes:
+  test-ldap-data:
+  test-ldap-config:
+  test-logs:
+
+networks:
+  ldap-sync-test:
+    driver: bridge

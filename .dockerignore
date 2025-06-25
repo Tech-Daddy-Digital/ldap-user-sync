@@ -1,0 +1,58 @@
+# Git files
+.git
+.gitignore
+
+# Python cache
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.pytest_cache
+
+# Virtual environments
+venv/
+env/
+.venv/
+.env/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Documentation
+README.md
+SPEC.md
+TODO.md
+CLAUDE.md
+docs/
+
+# Test files
+tests/
+test_*.py
+*_test.py
+
+# Development files
+.env
+.env.local
+.env.development
+config.yaml
+logs/
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Helm charts (will be in separate directory)
+helm/
+charts/
+k8s/

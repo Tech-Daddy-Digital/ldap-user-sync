@@ -1,0 +1,238 @@
+# Logging configuration for LDAP User Sync
+# This includes Fluentd configuration for log aggregation
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluentd-ldap-sync-config
+  namespace: kube-system
+data:
+  ldap-sync.conf: |
+    # Fluentd configuration for LDAP User Sync logs
+    
+    # Input: Capture logs from LDAP User Sync containers
+    <source>
+      @type tail
+      path /var/log/containers/*ldap-user-sync*.log
+      pos_file /var/log/fluentd-ldap-sync.log.pos
+      tag kubernetes.ldap-sync.*
+      format json
+      time_key time
+      time_format %Y-%m-%dT%H:%M:%S.%NZ
+      keep_time_key true
+    </source>
+    
+    # Filter: Parse Kubernetes metadata
+    <filter kubernetes.ldap-sync.**>
+      @type kubernetes_metadata
+      @log_level warn
+      skip_labels true
+      skip_container_metadata true
+      skip_master_url true
+      skip_namespace_metadata true
+    </filter>
+    
+    # Filter: Parse application logs
+    <filter kubernetes.ldap-sync.**>
+      @type parser
+      key_name log
+      reserve_data true
+      suppress_parse_error_log true
+      <parse>
+        @type regexp
+        expression /^(?<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3}) \[(?<level>\w+)\] (?<logger>\S+) - (?<message>.*)$/
+        time_key timestamp
+        time_format %Y-%m-%d %H:%M:%S,%L
+      </parse>
+    </filter>
+    
+    # Filter: Add additional metadata
+    <filter kubernetes.ldap-sync.**>
+      @type record_transformer
+      <record>
+        application "ldap-user-sync"
+        environment "#{ENV['ENVIRONMENT'] || 'unknown'}"
+        cluster "#{ENV['CLUSTER_NAME'] || 'unknown'}"
+      </record>
+    </filter>
+    
+    # Output: Send to centralized logging system
+    <match kubernetes.ldap-sync.**>
+      @type elasticsearch
+      host "#{ENV['ELASTICSEARCH_HOST'] || 'elasticsearch.logging.svc.cluster.local'}"
+      port "#{ENV['ELASTICSEARCH_PORT'] || 9200}"
+      scheme "#{ENV['ELASTICSEARCH_SCHEME'] || 'http'}"
+      user "#{ENV['ELASTICSEARCH_USER']}"
+      password "#{ENV['ELASTICSEARCH_PASSWORD']}"
+      
+      index_name ldap-user-sync-logs
+      type_name _doc
+      
+      # Buffer configuration
+      <buffer>
+        @type file
+        path /var/log/fluentd-buffers/ldap-sync
+        chunk_limit_size 32m
+        queue_limit_length 8
+        flush_interval 10s
+        retry_max_interval 30
+        retry_forever true
+      </buffer>
+      
+      # Error handling
+      <secondary>
+        @type file
+        path /var/log/fluentd-ldap-sync-failed
+        compress gzip
+      </secondary>
+    </match>
+
+---
+# Log rotation configuration for persistent logs
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: logrotate-ldap-sync
+data:
+  logrotate.conf: |
+    # Logrotate configuration for LDAP User Sync
+    
+    /app/logs/*.log {
+        daily
+        rotate 30
+        compress
+        delaycompress
+        missingok
+        notifempty
+        create 644 appuser appuser
+        postrotate
+            # Send SIGHUP to any running processes if needed
+            /bin/kill -HUP $(cat /var/run/rsyslog.pid 2>/dev/null) 2>/dev/null || true
+        endscript
+    }
+    
+    /app/logs/ldap-sync.log {
+        daily
+        rotate 30
+        compress
+        delaycompress
+        missingok
+        notifempty
+        create 644 appuser appuser
+        copytruncate
+        postrotate
+            echo "$(date): Log rotated" >> /app/logs/rotation.log
+        endscript
+    }
+
+---
+# Prometheus monitoring configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-ldap-sync-rules
+data:
+  ldap-sync.yml: |
+    groups:
+    - name: ldap-user-sync
+      rules:
+      # Job failure rate
+      - alert: LDAPSyncJobFailureRate
+        expr: rate(kube_job_status_failed{job_name=~"ldap-user-sync.*"}[1h]) > 0.1
+        for: 15m
+        labels:
+          severity: warning
+          component: ldap-user-sync
+        annotations:
+          summary: "High failure rate for LDAP User Sync jobs"
+          description: "LDAP User Sync jobs are failing at a rate of {{ $value }} per hour"
+      
+      # Job duration
+      - alert: LDAPSyncJobDuration
+        expr: kube_job_status_completion_time{job_name=~"ldap-user-sync.*"} - kube_job_status_start_time{job_name=~"ldap-user-sync.*"} > 3600
+        for: 5m
+        labels:
+          severity: warning
+          component: ldap-user-sync
+        annotations:
+          summary: "LDAP User Sync job running too long"
+          description: "LDAP User Sync job has been running for {{ $value }} seconds"
+      
+      # No recent successful runs
+      - alert: LDAPSyncNoRecentSuccess
+        expr: time() - kube_job_status_completion_time{job_name=~"ldap-user-sync.*", condition="Complete"} > 86400
+        for: 30m
+        labels:
+          severity: critical
+          component: ldap-user-sync
+        annotations:
+          summary: "No successful LDAP User Sync in 24 hours"
+          description: "LDAP User Sync has not completed successfully in the last 24 hours"
+
+---
+# Grafana dashboard configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-ldap-sync-dashboard
+data:
+  ldap-sync-dashboard.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "title": "LDAP User Sync Monitoring",
+        "tags": ["ldap", "user-sync", "batch"],
+        "timezone": "browser",
+        "panels": [
+          {
+            "title": "Job Success Rate",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "rate(kube_job_status_succeeded{job_name=~\"ldap-user-sync.*\"}[24h])",
+                "legendFormat": "Success Rate"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "percentunit"
+              }
+            },
+            "gridPos": {"h": 8, "w": 6, "x": 0, "y": 0}
+          },
+          {
+            "title": "Job Duration",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "kube_job_status_completion_time{job_name=~\"ldap-user-sync.*\"} - kube_job_status_start_time{job_name=~\"ldap-user-sync.*\"}",
+                "legendFormat": "Duration (seconds)"
+              }
+            ],
+            "yAxes": [
+              {
+                "unit": "s"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 6, "y": 0}
+          },
+          {
+            "title": "Recent Job Status",
+            "type": "table",
+            "targets": [
+              {
+                "expr": "kube_job_info{job_name=~\"ldap-user-sync.*\"}",
+                "format": "table"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 6, "x": 18, "y": 0}
+          }
+        ],
+        "time": {
+          "from": "now-7d",
+          "to": "now"
+        },
+        "refresh": "1m"
+      }
+    }

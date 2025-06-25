@@ -1,0 +1,198 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "ldap-user-sync.fullname" . }}
+  labels:
+    {{- include "ldap-user-sync.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.cronjob.schedule | quote }}
+  timezone: {{ .Values.cronjob.timezone | default "UTC" }}
+  suspend: {{ .Values.cronjob.suspend }}
+  successfulJobsHistoryLimit: {{ .Values.cronjob.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.cronjob.failedJobsHistoryLimit }}
+  concurrencyPolicy: {{ .Values.cronjob.concurrencyPolicy }}
+  {{- if .Values.cronjob.startingDeadlineSeconds }}
+  startingDeadlineSeconds: {{ .Values.cronjob.startingDeadlineSeconds }}
+  {{- end }}
+  jobTemplate:
+    spec:
+      {{- if .Values.cronjob.backoffLimit }}
+      backoffLimit: {{ .Values.cronjob.backoffLimit }}
+      {{- end }}
+      {{- if .Values.cronjob.activeDeadlineSeconds }}
+      activeDeadlineSeconds: {{ .Values.cronjob.activeDeadlineSeconds }}
+      {{- end }}
+      template:
+        metadata:
+          labels:
+            {{- include "ldap-user-sync.selectorLabels" . | nindent 12 }}
+          {{- with .Values.pod.annotations }}
+          annotations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        spec:
+          restartPolicy: {{ .Values.cronjob.restartPolicy }}
+          {{- if .Values.serviceAccount.create }}
+          serviceAccountName: {{ include "ldap-user-sync.serviceAccountName" . }}
+          {{- end }}
+          {{- with .Values.global.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          securityContext:
+            {{- toYaml .Values.pod.securityContext | nindent 12 }}
+          containers:
+          - name: {{ .Values.container.name }}
+            image: {{ include "ldap-user-sync.image" . }}
+            imagePullPolicy: {{ .Values.image.pullPolicy }}
+            securityContext:
+              {{- toYaml .Values.container.securityContext | nindent 14 }}
+            env:
+            # LDAP Configuration
+            - name: LDAP_SERVER_URL
+              value: {{ .Values.ldap.serverUrl | quote }}
+            - name: LDAP_BIND_DN
+              value: {{ .Values.ldap.bindDn | quote }}
+            - name: LDAP_BIND_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "ldap-user-sync.secretName" . }}
+                  key: ldap-bind-password
+            - name: LDAP_USER_BASE_DN
+              value: {{ .Values.ldap.userBaseDn | quote }}
+            - name: LDAP_USER_FILTER
+              value: {{ .Values.ldap.userFilter | quote }}
+            
+            # Logging Configuration
+            - name: LOG_LEVEL
+              value: {{ .Values.logging.level | quote }}
+            - name: LOG_DIR
+              value: {{ .Values.logging.logDir | quote }}
+            - name: LOG_ROTATION
+              value: {{ .Values.logging.rotation | quote }}
+            - name: LOG_RETENTION_DAYS
+              value: {{ .Values.logging.retentionDays | quote }}
+            
+            # Error Handling Configuration
+            - name: MAX_RETRIES
+              value: {{ .Values.errorHandling.maxRetries | quote }}
+            - name: RETRY_WAIT_SECONDS
+              value: {{ .Values.errorHandling.retryWaitSeconds | quote }}
+            - name: MAX_ERRORS_PER_VENDOR
+              value: {{ .Values.errorHandling.maxErrorsPerVendor | quote }}
+            
+            # Notifications Configuration
+            - name: ENABLE_EMAIL_NOTIFICATIONS
+              value: {{ .Values.notifications.enableEmail | quote }}
+            - name: EMAIL_ON_FAILURE
+              value: {{ .Values.notifications.emailOnFailure | quote }}
+            - name: EMAIL_ON_SUCCESS
+              value: {{ .Values.notifications.emailOnSuccess | quote }}
+            - name: SMTP_SERVER
+              value: {{ .Values.notifications.smtp.server | quote }}
+            - name: SMTP_PORT
+              value: {{ .Values.notifications.smtp.port | quote }}
+            - name: SMTP_TLS
+              value: {{ .Values.notifications.smtp.tls | quote }}
+            - name: SMTP_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "ldap-user-sync.secretName" . }}
+                  key: smtp-username
+            - name: SMTP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "ldap-user-sync.secretName" . }}
+                  key: smtp-password
+            - name: EMAIL_FROM
+              value: {{ .Values.notifications.smtp.from | quote }}
+            - name: EMAIL_TO
+              value: {{ .Values.notifications.smtp.to | quote }}
+            
+            # Vendor-specific environment variables
+            {{- range $index, $vendor := .Values.vendors }}
+            {{- $vendorNum := add $index 1 }}
+            - name: VENDOR{{ $vendorNum }}_NAME
+              value: {{ $vendor.name | quote }}
+            - name: VENDOR{{ $vendorNum }}_MODULE
+              value: {{ $vendor.module | quote }}
+            - name: VENDOR{{ $vendorNum }}_BASE_URL
+              value: {{ $vendor.baseUrl | quote }}
+            - name: VENDOR{{ $vendorNum }}_AUTH_METHOD
+              value: {{ $vendor.auth.method | quote }}
+            - name: VENDOR{{ $vendorNum }}_FORMAT
+              value: {{ $vendor.format | quote }}
+            - name: VENDOR{{ $vendorNum }}_VERIFY_SSL
+              value: {{ $vendor.verifySsl | quote }}
+            {{- if eq $vendor.auth.method "basic" }}
+            - name: VENDOR{{ $vendorNum }}_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "ldap-user-sync.secretName" $ }}
+                  key: vendor{{ $vendorNum }}-username
+            - name: VENDOR{{ $vendorNum }}_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "ldap-user-sync.secretName" $ }}
+                  key: vendor{{ $vendorNum }}-password
+            {{- else if eq $vendor.auth.method "token" }}
+            - name: VENDOR{{ $vendorNum }}_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "ldap-user-sync.secretName" $ }}
+                  key: vendor{{ $vendorNum }}-token
+            {{- end }}
+            {{- range $groupIndex, $group := $vendor.groups }}
+            - name: VENDOR{{ $vendorNum }}_GROUP{{ add $groupIndex 1 }}_LDAP
+              value: {{ $group.ldapGroup | quote }}
+            - name: VENDOR{{ $vendorNum }}_GROUP{{ add $groupIndex 1 }}_VENDOR
+              value: {{ $group.vendorGroup | quote }}
+            {{- end }}
+            {{- end }}
+            
+            # Additional environment variables
+            {{- if .Values.extraEnvVars }}
+            {{- toYaml .Values.extraEnvVars | nindent 12 }}
+            {{- end }}
+            
+            volumeMounts:
+            - name: config
+              mountPath: /app/config.yaml
+              subPath: config.yaml
+              readOnly: true
+            {{- if .Values.persistence.enabled }}
+            - name: logs
+              mountPath: {{ .Values.logging.logDir }}
+            {{- end }}
+            {{- if .Values.extraVolumeMounts }}
+            {{- toYaml .Values.extraVolumeMounts | nindent 12 }}
+            {{- end }}
+            
+            resources:
+              {{- toYaml .Values.container.resources | nindent 14 }}
+          
+          volumes:
+          - name: config
+            configMap:
+              name: {{ include "ldap-user-sync.configMapName" . }}
+          {{- if .Values.persistence.enabled }}
+          - name: logs
+            persistentVolumeClaim:
+              claimName: {{ include "ldap-user-sync.fullname" . }}-logs
+          {{- end }}
+          {{- if .Values.extraVolumes }}
+          {{- toYaml .Values.extraVolumes | nindent 10 }}
+          {{- end }}
+          
+          {{- with .Values.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.affinity }}
+          affinity:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}

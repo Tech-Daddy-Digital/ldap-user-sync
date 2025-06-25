@@ -1,0 +1,134 @@
+# Development values for ldap-user-sync
+# Override the default values for development/testing
+
+# Development image configuration
+image:
+  registry: "localhost:5000"
+  repository: ldap-user-sync
+  tag: "dev"
+  pullPolicy: Always
+
+# More frequent schedule for development testing
+cronjob:
+  schedule: "*/15 * * * *"  # Every 15 minutes
+  timezone: "UTC"
+  suspend: false
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 2
+  concurrencyPolicy: Allow
+  startingDeadlineSeconds: 300  # 5 minutes
+  backoffLimit: 3
+  restartPolicy: OnFailure
+  activeDeadlineSeconds: 1800   # 30 minutes timeout
+
+# Minimal resources for development
+container:
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 50m
+      memory: 128Mi
+
+# Development LDAP configuration (test environment)
+ldap:
+  serverUrl: "ldap://test-ldap.dev.company.com:389"
+  bindDn: "CN=Test-Sync-Service,OU=Service Accounts,OU=Users,DC=dev,DC=company,DC=com"
+  userBaseDn: "OU=Users,DC=dev,DC=company,DC=com"
+  userFilter: "(objectClass=person)"
+
+# Test vendor configurations
+vendors:
+  - name: "TestVendorApp1"
+    module: "vendor_app1"
+    baseUrl: "https://test-api1.dev.company.com/v1"
+    auth:
+      method: "basic"
+    format: "json"
+    verifySsl: false  # Disable SSL verification for test env
+    groups:
+      - ldapGroup: "CN=Test_App1_Users,OU=Test Groups,OU=Groups,DC=dev,DC=company,DC=com"
+        vendorGroup: "test_users"
+
+  - name: "TestVendorApp2"
+    module: "vendor_app2"
+    baseUrl: "https://test-api2.dev.company.com/rest"
+    auth:
+      method: "token"
+    format: "xml"
+    verifySsl: false
+    groups:
+      - ldapGroup: "CN=Test_App2_Users,OU=Test Groups,OU=Groups,DC=dev,DC=company,DC=com"
+        vendorGroup: "TestUsersGroup123"
+
+# Debug logging for development
+logging:
+  level: "DEBUG"
+  logDir: "/app/logs"
+  rotation: "daily"
+  retentionDays: 3  # Keep logs for 3 days only
+
+# Relaxed error handling for development
+errorHandling:
+  maxRetries: 2
+  retryWaitSeconds: 3
+  maxErrorsPerVendor: 10
+
+# Development notifications (optional)
+notifications:
+  enableEmail: false  # Disable emails in dev
+  emailOnFailure: false
+  emailOnSuccess: false
+  smtp:
+    server: "localhost"
+    port: 1025  # MailHog or similar test SMTP
+    tls: false
+    from: "ldap-sync-dev@localhost"
+    to: "developer@localhost"
+
+# No persistent storage in development
+persistence:
+  enabled: false
+
+# Create secrets in development (for testing)
+secrets:
+  create: true
+  ldapBindPassword: "ZGV2LXBhc3N3b3Jk"  # base64: dev-password
+  vendor1Username: "ZGV2LXVzZXI="       # base64: dev-user
+  vendor1Password: "ZGV2LXBhc3M="       # base64: dev-pass
+  vendor2Token: "ZGV2LXRva2VuLTEyMw=="  # base64: dev-token-123
+  smtpUsername: "ZGV2QGxvY2FsaG9zdA=="  # base64: dev@localhost
+  smtpPassword: "ZGV2cGFzcw=="          # base64: devpass
+
+# Development node selection (any node)
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Relaxed security for development
+pod:
+  annotations:
+    container.apparmor.security.beta.kubernetes.io/ldap-user-sync: "runtime/default"
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+
+container:
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: false  # Allow writing for development
+    capabilities:
+      drop:
+        - ALL
+
+# Additional environment variables for development
+extraEnvVars:
+  - name: ENV
+    value: "development"
+  - name: DEBUG
+    value: "true"
+  - name: PYTHONDONTWRITEBYTECODE
+    value: "1"

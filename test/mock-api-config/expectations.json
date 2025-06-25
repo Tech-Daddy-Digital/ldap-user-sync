@@ -1,0 +1,95 @@
+[
+  {
+    "httpRequest": {
+      "method": "GET",
+      "path": "/api/v1/groups/test-group/members"
+    },
+    "httpResponse": {
+      "statusCode": 200,
+      "headers": {
+        "Content-Type": ["application/json"]
+      },
+      "body": {
+        "members": [
+          {
+            "id": "existing-user-1",
+            "username": "jdoe",
+            "email": "john.doe@example.com",
+            "firstName": "John",
+            "lastName": "Doe"
+          },
+          {
+            "id": "existing-user-2",
+            "username": "asmith",
+            "email": "alice.smith@example.com",
+            "firstName": "Alice",
+            "lastName": "Smith"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "httpRequest": {
+      "method": "POST",
+      "path": "/api/v1/groups/test-group/members"
+    },
+    "httpResponse": {
+      "statusCode": 201,
+      "headers": {
+        "Content-Type": ["application/json"]
+      },
+      "body": {
+        "message": "User added to group successfully",
+        "userId": "new-user-id"
+      }
+    }
+  },
+  {
+    "httpRequest": {
+      "method": "DELETE",
+      "path": "/api/v1/groups/test-group/members/.*"
+    },
+    "httpResponse": {
+      "statusCode": 200,
+      "headers": {
+        "Content-Type": ["application/json"]
+      },
+      "body": {
+        "message": "User removed from group successfully"
+      }
+    }
+  },
+  {
+    "httpRequest": {
+      "method": "PUT",
+      "path": "/api/v1/users/.*"
+    },
+    "httpResponse": {
+      "statusCode": 200,
+      "headers": {
+        "Content-Type": ["application/json"]
+      },
+      "body": {
+        "message": "User updated successfully"
+      }
+    }
+  },
+  {
+    "httpRequest": {
+      "method": "POST",
+      "path": "/api/v1/users"
+    },
+    "httpResponse": {
+      "statusCode": 201,
+      "headers": {
+        "Content-Type": ["application/json"]
+      },
+      "body": {
+        "message": "User created successfully",
+        "userId": "new-user-id",
+        "username": "newuser"
+      }
+    }
+  }
+]

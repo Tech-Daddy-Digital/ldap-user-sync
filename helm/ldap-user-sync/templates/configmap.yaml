@@ -1,0 +1,68 @@
+{{- if .Values.configMap.create }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "ldap-user-sync.configMapName" . }}
+  labels:
+    {{- include "ldap-user-sync.labels" . | nindent 4 }}
+data:
+  config.yaml: |
+    # LDAP User Sync Configuration
+    ldap:
+      server_url: "${LDAP_SERVER_URL}"
+      bind_dn: "${LDAP_BIND_DN}"
+      bind_password: "${LDAP_BIND_PASSWORD}"
+      user_base_dn: "${LDAP_USER_BASE_DN}"
+      user_filter: "${LDAP_USER_FILTER}"
+      attributes: ["cn", "givenName", "sn", "mail", "sAMAccountName"]
+
+    vendor_apps:
+    {{- range $index, $vendor := .Values.vendors }}
+    {{- $vendorNum := add $index 1 }}
+      - name: "${VENDOR{{ $vendorNum }}_NAME}"
+        module: "${VENDOR{{ $vendorNum }}_MODULE}"
+        base_url: "${VENDOR{{ $vendorNum }}_BASE_URL}"
+        auth:
+          method: "${VENDOR{{ $vendorNum }}_AUTH_METHOD}"
+          {{- if eq $vendor.auth.method "basic" }}
+          username: "${VENDOR{{ $vendorNum }}_USERNAME}"
+          password: "${VENDOR{{ $vendorNum }}_PASSWORD}"
+          {{- else if eq $vendor.auth.method "token" }}
+          token: "${VENDOR{{ $vendorNum }}_TOKEN}"
+          {{- end }}
+        format: "${VENDOR{{ $vendorNum }}_FORMAT}"
+        verify_ssl: ${VENDOR{{ $vendorNum }}_VERIFY_SSL}
+        groups:
+        {{- range $groupIndex, $group := $vendor.groups }}
+          - ldap_group: "${VENDOR{{ $vendorNum }}_GROUP{{ add $groupIndex 1 }}_LDAP}"
+            vendor_group: "${VENDOR{{ $vendorNum }}_GROUP{{ add $groupIndex 1 }}_VENDOR}"
+        {{- end }}
+    {{- end }}
+
+    logging:
+      level: "${LOG_LEVEL}"
+      log_dir: "${LOG_DIR}"
+      rotation: "${LOG_ROTATION}"
+      retention_days: ${LOG_RETENTION_DAYS}
+
+    error_handling:
+      max_retries: ${MAX_RETRIES}
+      retry_wait_seconds: ${RETRY_WAIT_SECONDS}
+      max_errors_per_vendor: ${MAX_ERRORS_PER_VENDOR}
+
+    notifications:
+      enable_email: ${ENABLE_EMAIL_NOTIFICATIONS}
+      email_on_failure: ${EMAIL_ON_FAILURE}
+      email_on_success: ${EMAIL_ON_SUCCESS}
+      smtp_server: "${SMTP_SERVER}"
+      smtp_port: ${SMTP_PORT}
+      smtp_tls: ${SMTP_TLS}
+      smtp_username: "${SMTP_USERNAME}"
+      smtp_password: "${SMTP_PASSWORD}"
+      email_from: "${EMAIL_FROM}"
+      email_to: "${EMAIL_TO}"
+
+  {{- if .Values.configMap.data }}
+  {{- toYaml .Values.configMap.data | nindent 2 }}
+  {{- end }}
+{{- end }}

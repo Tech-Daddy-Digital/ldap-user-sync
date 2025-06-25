@@ -1,0 +1,42 @@
+1. The LDAP User Sync CronJob has been deployed successfully!
+
+2. The sync will run according to the schedule: {{ .Values.cronjob.schedule }}
+
+3. To view the CronJob status:
+   kubectl get cronjob {{ include "ldap-user-sync.fullname" . }} -n {{ .Release.Namespace }}
+
+4. To view recent jobs:
+   kubectl get jobs -l app.kubernetes.io/instance={{ .Release.Name }} -n {{ .Release.Namespace }}
+
+5. To view logs from the latest job:
+   kubectl logs -l app.kubernetes.io/instance={{ .Release.Name }} -n {{ .Release.Namespace }} --tail=100
+
+6. To manually trigger a job (for testing):
+   kubectl create job --from=cronjob/{{ include "ldap-user-sync.fullname" . }} {{ include "ldap-user-sync.fullname" . }}-manual -n {{ .Release.Namespace }}
+
+7. Configuration details:
+   - LDAP Server: {{ .Values.ldap.serverUrl }}
+   - Number of vendors configured: {{ len .Values.vendors }}
+   - Log level: {{ .Values.logging.level }}
+   {{- if .Values.notifications.enableEmail }}
+   - Email notifications: Enabled (sending to {{ .Values.notifications.smtp.to }})
+   {{- else }}
+   - Email notifications: Disabled
+   {{- end }}
+
+8. Security considerations:
+   - The application runs as non-root user (UID: {{ .Values.pod.securityContext.runAsUser }})
+   - Sensitive credentials are stored in Kubernetes secrets
+   - SSL verification is enabled for vendor connections
+
+{{- if .Values.persistence.enabled }}
+9. Persistent logging:
+   - Logs are persisted to a {{ .Values.persistence.size }} PVC
+   - Log retention: {{ .Values.logging.retentionDays }} days
+{{- else }}
+9. Logging:
+   - Logs are ephemeral (stored in container filesystem)
+   - Consider enabling persistence for production use
+{{- end }}
+
+For troubleshooting and more information, check the application documentation.

@@ -1,0 +1,65 @@
+# LDAP User Sync Configuration Template
+# This template shows the structure. In production, values are injected via environment variables or ConfigMaps
+
+ldap:
+  server_url: "${LDAP_SERVER_URL:-ldaps://ldap.example.com:636}"
+  bind_dn: "${LDAP_BIND_DN:-CN=Service Account,OU=Users,DC=example,DC=com}"
+  bind_password: "${LDAP_BIND_PASSWORD}"
+  user_base_dn: "${LDAP_USER_BASE_DN:-OU=Users,DC=example,DC=com}"
+  user_filter: "${LDAP_USER_FILTER:-(objectClass=person)}"
+  attributes: ["cn", "givenName", "sn", "mail", "sAMAccountName"]
+
+vendor_apps:
+  - name: "${VENDOR1_NAME:-VendorApp1}"
+    module: "${VENDOR1_MODULE:-vendor_app1}"
+    base_url: "${VENDOR1_BASE_URL}"
+    auth:
+      method: "${VENDOR1_AUTH_METHOD:-basic}"
+      username: "${VENDOR1_USERNAME}"
+      password: "${VENDOR1_PASSWORD}"
+      token: "${VENDOR1_TOKEN}"
+    format: "${VENDOR1_FORMAT:-json}"
+    verify_ssl: ${VENDOR1_VERIFY_SSL:-true}
+    truststore_file: "${VENDOR1_TRUSTSTORE_FILE}"
+    truststore_password: "${VENDOR1_TRUSTSTORE_PASSWORD}"
+    truststore_type: "${VENDOR1_TRUSTSTORE_TYPE:-PEM}"
+    groups:
+      - ldap_group: "${VENDOR1_GROUP1_LDAP}"
+        vendor_group: "${VENDOR1_GROUP1_VENDOR}"
+      - ldap_group: "${VENDOR1_GROUP2_LDAP}"
+        vendor_group: "${VENDOR1_GROUP2_VENDOR}"
+
+  - name: "${VENDOR2_NAME:-VendorApp2}"
+    module: "${VENDOR2_MODULE:-vendor_app2}"
+    base_url: "${VENDOR2_BASE_URL}"
+    auth:
+      method: "${VENDOR2_AUTH_METHOD:-token}"
+      token: "${VENDOR2_TOKEN}"
+    format: "${VENDOR2_FORMAT:-xml}"
+    verify_ssl: ${VENDOR2_VERIFY_SSL:-true}
+    groups:
+      - ldap_group: "${VENDOR2_GROUP1_LDAP}"
+        vendor_group: "${VENDOR2_GROUP1_VENDOR}"
+
+logging:
+  level: "${LOG_LEVEL:-INFO}"
+  log_dir: "${LOG_DIR:-/app/logs}"
+  rotation: "${LOG_ROTATION:-daily}"
+  retention_days: ${LOG_RETENTION_DAYS:-7}
+
+error_handling:
+  max_retries: ${MAX_RETRIES:-3}
+  retry_wait_seconds: ${RETRY_WAIT_SECONDS:-5}
+  max_errors_per_vendor: ${MAX_ERRORS_PER_VENDOR:-5}
+
+notifications:
+  enable_email: ${ENABLE_EMAIL_NOTIFICATIONS:-true}
+  email_on_failure: ${EMAIL_ON_FAILURE:-true}
+  email_on_success: ${EMAIL_ON_SUCCESS:-false}
+  smtp_server: "${SMTP_SERVER}"
+  smtp_port: ${SMTP_PORT:-587}
+  smtp_tls: ${SMTP_TLS:-true}
+  smtp_username: "${SMTP_USERNAME}"
+  smtp_password: "${SMTP_PASSWORD}"
+  email_from: "${EMAIL_FROM}"
+  email_to: "${EMAIL_TO}"

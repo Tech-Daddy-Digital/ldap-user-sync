@@ -1,0 +1,222 @@
+# Test deployment for validating Kubernetes configuration
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ldap-user-sync-test
+  labels:
+    name: ldap-user-sync-test
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ldap-sync-test-secrets
+  namespace: ldap-user-sync-test
+type: Opaque
+data:
+  ldap-bind-password: dGVzdC1wYXNzd29yZA==  # test-password
+  vendor1-username: dGVzdHVzZXI=              # testuser
+  vendor1-password: dGVzdHBhc3M=              # testpass
+  smtp-username: dGVzdEBleGFtcGxlLmNvbQ==    # test@example.com
+  smtp-password: dGVzdC1zbXRwLXBhc3M=        # test-smtp-pass
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ldap-sync-test-config
+  namespace: ldap-user-sync-test
+data:
+  config.yaml: |
+    ldap:
+      server_url: "${LDAP_SERVER_URL}"
+      bind_dn: "${LDAP_BIND_DN}"
+      bind_password: "${LDAP_BIND_PASSWORD}"
+      user_base_dn: "${LDAP_USER_BASE_DN}"
+      user_filter: "${LDAP_USER_FILTER}"
+      attributes: ["cn", "givenName", "sn", "mail", "sAMAccountName"]
+
+    vendor_apps:
+      - name: "${VENDOR1_NAME}"
+        module: "${VENDOR1_MODULE}"
+        base_url: "${VENDOR1_BASE_URL}"
+        auth:
+          method: "${VENDOR1_AUTH_METHOD}"
+          username: "${VENDOR1_USERNAME}"
+          password: "${VENDOR1_PASSWORD}"
+        format: "${VENDOR1_FORMAT}"
+        verify_ssl: ${VENDOR1_VERIFY_SSL}
+        groups:
+          - ldap_group: "${VENDOR1_GROUP1_LDAP}"
+            vendor_group: "${VENDOR1_GROUP1_VENDOR}"
+
+    logging:
+      level: "${LOG_LEVEL}"
+      log_dir: "${LOG_DIR}"
+      rotation: "${LOG_ROTATION}"
+      retention_days: ${LOG_RETENTION_DAYS}
+
+    error_handling:
+      max_retries: ${MAX_RETRIES}
+      retry_wait_seconds: ${RETRY_WAIT_SECONDS}
+      max_errors_per_vendor: ${MAX_ERRORS_PER_VENDOR}
+
+    notifications:
+      enable_email: ${ENABLE_EMAIL_NOTIFICATIONS}
+      email_on_failure: ${EMAIL_ON_FAILURE}
+      email_on_success: ${EMAIL_ON_SUCCESS}
+      smtp_server: "${SMTP_SERVER}"
+      smtp_port: ${SMTP_PORT}
+      smtp_tls: ${SMTP_TLS}
+      smtp_username: "${SMTP_USERNAME}"
+      smtp_password: "${SMTP_PASSWORD}"
+      email_from: "${EMAIL_FROM}"
+      email_to: "${EMAIL_TO}"
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ldap-user-sync-test
+  namespace: ldap-user-sync-test
+  labels:
+    app.kubernetes.io/name: ldap-user-sync
+    app.kubernetes.io/instance: test
+    app.kubernetes.io/version: "1.0.0"
+spec:
+  schedule: "*/5 * * * *"  # Every 5 minutes for testing
+  suspend: true  # Start suspended
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 2
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 600  # 10 minutes
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: ldap-user-sync
+            app.kubernetes.io/instance: test
+        spec:
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            fsGroup: 1000
+          containers:
+          - name: ldap-user-sync
+            image: ldap-user-sync:test
+            imagePullPolicy: Never  # Use local image for testing
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: false
+              capabilities:
+                drop:
+                  - ALL
+            env:
+            # LDAP Configuration
+            - name: LDAP_SERVER_URL
+              value: "ldap://test-ldap.default.svc.cluster.local:389"
+            - name: LDAP_BIND_DN
+              value: "cn=admin,dc=example,dc=com"
+            - name: LDAP_BIND_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ldap-sync-test-secrets
+                  key: ldap-bind-password
+            - name: LDAP_USER_BASE_DN
+              value: "ou=users,dc=example,dc=com"
+            - name: LDAP_USER_FILTER
+              value: "(objectClass=person)"
+            
+            # Vendor Configuration
+            - name: VENDOR1_NAME
+              value: "TestVendor1"
+            - name: VENDOR1_MODULE
+              value: "vendor_app1"
+            - name: VENDOR1_BASE_URL
+              value: "http://mock-api.default.svc.cluster.local:8080/api/v1"
+            - name: VENDOR1_AUTH_METHOD
+              value: "basic"
+            - name: VENDOR1_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: ldap-sync-test-secrets
+                  key: vendor1-username
+            - name: VENDOR1_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ldap-sync-test-secrets
+                  key: vendor1-password
+            - name: VENDOR1_FORMAT
+              value: "json"
+            - name: VENDOR1_VERIFY_SSL
+              value: "false"
+            - name: VENDOR1_GROUP1_LDAP
+              value: "cn=testgroup,ou=groups,dc=example,dc=com"
+            - name: VENDOR1_GROUP1_VENDOR
+              value: "test-group"
+            
+            # Logging Configuration
+            - name: LOG_LEVEL
+              value: "DEBUG"
+            - name: LOG_DIR
+              value: "/app/logs"
+            - name: LOG_ROTATION
+              value: "daily"
+            - name: LOG_RETENTION_DAYS
+              value: "3"
+            
+            # Error Handling
+            - name: MAX_RETRIES
+              value: "2"
+            - name: RETRY_WAIT_SECONDS
+              value: "3"
+            - name: MAX_ERRORS_PER_VENDOR
+              value: "5"
+            
+            # Notifications (disabled for testing)
+            - name: ENABLE_EMAIL_NOTIFICATIONS
+              value: "false"
+            - name: EMAIL_ON_FAILURE
+              value: "false"
+            - name: EMAIL_ON_SUCCESS
+              value: "false"
+            - name: SMTP_SERVER
+              value: "localhost"
+            - name: SMTP_PORT
+              value: "587"
+            - name: SMTP_TLS
+              value: "false"
+            - name: SMTP_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: ldap-sync-test-secrets
+                  key: smtp-username
+            - name: SMTP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ldap-sync-test-secrets
+                  key: smtp-password
+            - name: EMAIL_FROM
+              value: "test@example.com"
+            - name: EMAIL_TO
+              value: "admin@example.com"
+            
+            volumeMounts:
+            - name: config
+              mountPath: /app/config.yaml
+              subPath: config.yaml
+              readOnly: true
+            
+            resources:
+              limits:
+                cpu: 200m
+                memory: 256Mi
+              requests:
+                cpu: 50m
+                memory: 128Mi
+          
+          volumes:
+          - name: config
+            configMap:
+              name: ldap-sync-test-config

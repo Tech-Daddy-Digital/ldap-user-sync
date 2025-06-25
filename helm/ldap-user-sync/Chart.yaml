@@ -1,0 +1,19 @@
+apiVersion: v2
+name: ldap-user-sync
+description: A Helm chart for LDAP to Vendor Application User Synchronization Service
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - ldap
+  - synchronization
+  - user-management
+  - batch-job
+home: https://github.com/example/ldap-user-sync
+sources:
+  - https://github.com/example/ldap-user-sync
+maintainers:
+  - name: LDAP Sync Team
+    email: team@example.com
+annotations:
+  category: Infrastructure

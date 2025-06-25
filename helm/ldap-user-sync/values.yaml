@@ -1,0 +1,173 @@
+# Default values for ldap-user-sync
+# This is a YAML-formatted file.
+
+# Global settings
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+
+# Image configuration
+image:
+  registry: docker.io
+  repository: ldap-user-sync
+  tag: "1.0.0"
+  pullPolicy: IfNotPresent
+
+# Service account
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# CronJob configuration
+cronjob:
+  # Schedule in cron format
+  schedule: "0 2 * * *"  # Daily at 2 AM
+  timezone: "UTC"
+  suspend: false
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  backoffLimit: 2
+  restartPolicy: OnFailure
+  activeDeadlineSeconds: 7200  # 2 hours timeout
+
+# Pod configuration
+pod:
+  annotations: {}
+  labels: {}
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+
+# Container configuration
+container:
+  name: ldap-user-sync
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 256Mi
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: false
+    capabilities:
+      drop:
+        - ALL
+
+# LDAP configuration
+ldap:
+  serverUrl: "ldaps://ldap.example.com:636"
+  bindDn: "CN=Service Account,OU=Users,DC=example,DC=com"
+  # bindPassword: Set via secret
+  userBaseDn: "OU=Users,DC=example,DC=com"
+  userFilter: "(objectClass=person)"
+
+# Vendor applications configuration
+vendors:
+  - name: "VendorApp1"
+    module: "vendor_app1"
+    baseUrl: "https://api.vendorapp1.com/v1"
+    auth:
+      method: "basic"
+      # username and password set via secret
+    format: "json"
+    verifySsl: true
+    groups:
+      - ldapGroup: "CN=App1_Users,OU=Groups,DC=example,DC=com"
+        vendorGroup: "users"
+      - ldapGroup: "CN=App1_Admins,OU=Groups,DC=example,DC=com"
+        vendorGroup: "admins"
+
+  - name: "VendorApp2"
+    module: "vendor_app2"
+    baseUrl: "https://api.vendorapp2.com/rest"
+    auth:
+      method: "token"
+      # token set via secret
+    format: "xml"
+    verifySsl: true
+    groups:
+      - ldapGroup: "CN=App2_Users,OU=Groups,DC=example,DC=com"
+        vendorGroup: "App2UsersGroupID123"
+
+# Logging configuration
+logging:
+  level: "INFO"
+  logDir: "/app/logs"
+  rotation: "daily"
+  retentionDays: 7
+
+# Error handling configuration
+errorHandling:
+  maxRetries: 3
+  retryWaitSeconds: 5
+  maxErrorsPerVendor: 5
+
+# Notifications configuration
+notifications:
+  enableEmail: true
+  emailOnFailure: true
+  emailOnSuccess: false
+  smtp:
+    server: "smtp.example.com"
+    port: 587
+    tls: true
+    # username and password set via secret
+    from: "alerts@example.com"
+    to: "admin@example.com"
+
+# Persistent volume for logs (optional)
+persistence:
+  enabled: false
+  storageClass: ""
+  accessMode: ReadWriteOnce
+  size: 1Gi
+  annotations: {}
+
+# Secrets configuration
+secrets:
+  # Create secrets from values
+  create: true
+  # Use existing secret
+  existingSecret: ""
+  # Secret data (base64 encoded in actual deployment)
+  ldapBindPassword: ""
+  vendor1Username: ""
+  vendor1Password: ""
+  vendor1Token: ""
+  vendor2Token: ""
+  smtpUsername: ""
+  smtpPassword: ""
+
+# ConfigMap configuration
+configMap:
+  create: true
+  data: {}
+
+# Node selection
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Additional environment variables
+extraEnvVars: []
+  # - name: CUSTOM_VAR
+  #   value: "custom-value"
+
+# Additional volumes
+extraVolumes: []
+  # - name: custom-certs
+  #   secret:
+  #     secretName: custom-certs
+
+# Additional volume mounts
+extraVolumeMounts: []
+  # - name: custom-certs
+  #   mountPath: /etc/ssl/certs/custom
+  #   readOnly: true

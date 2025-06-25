@@ -1,0 +1,162 @@
+# Production values for ldap-user-sync
+# Override the default values for production deployment
+
+# Image configuration for production
+image:
+  registry: your-registry.com
+  repository: ldap-user-sync
+  tag: "1.0.0"
+  pullPolicy: Always
+
+# Production CronJob schedule - daily at 2 AM
+cronjob:
+  schedule: "0 2 * * *"
+  timezone: "America/New_York"
+  suspend: false
+  successfulJobsHistoryLimit: 5
+  failedJobsHistoryLimit: 3
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 1800  # 30 minutes
+  backoffLimit: 1
+  restartPolicy: OnFailure
+  activeDeadlineSeconds: 3600   # 1 hour timeout
+
+# Enhanced resource limits for production
+container:
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 200m
+      memory: 512Mi
+
+# Production LDAP configuration
+ldap:
+  serverUrl: "ldaps://prod-ldap.company.com:636"
+  bindDn: "CN=LDAP-Sync-Service,OU=Service Accounts,OU=Users,DC=company,DC=com"
+  userBaseDn: "OU=Users,DC=company,DC=com"
+  userFilter: "(&(objectClass=person)(!(userAccountControl:1.2.840.113556.1.4.803:=2)))"
+
+# Production vendor configurations
+vendors:
+  - name: "SalesforceApp"
+    module: "vendor_salesforce"
+    baseUrl: "https://company.my.salesforce.com/services/data/v57.0"
+    auth:
+      method: "token"
+    format: "json"
+    verifySsl: true
+    groups:
+      - ldapGroup: "CN=Salesforce_Users,OU=Application Groups,OU=Groups,DC=company,DC=com"
+        vendorGroup: "salesforce_users"
+      - ldapGroup: "CN=Salesforce_Admins,OU=Application Groups,OU=Groups,DC=company,DC=com"
+        vendorGroup: "salesforce_admins"
+
+  - name: "JiraApp"
+    module: "vendor_jira"
+    baseUrl: "https://company.atlassian.net/rest/api/3"
+    auth:
+      method: "basic"
+    format: "json"
+    verifySsl: true
+    groups:
+      - ldapGroup: "CN=Jira_Users,OU=Application Groups,OU=Groups,DC=company,DC=com"
+        vendorGroup: "jira-users"
+      - ldapGroup: "CN=Jira_Developers,OU=Application Groups,OU=Groups,DC=company,DC=com"
+        vendorGroup: "jira-developers"
+
+# Enhanced logging for production
+logging:
+  level: "INFO"
+  logDir: "/app/logs"
+  rotation: "daily"
+  retentionDays: 30  # Keep logs for 30 days
+
+# Stricter error handling for production
+errorHandling:
+  maxRetries: 5
+  retryWaitSeconds: 10
+  maxErrorsPerVendor: 3
+
+# Production notifications
+notifications:
+  enableEmail: true
+  emailOnFailure: true
+  emailOnSuccess: true  # Enable success notifications in prod
+  smtp:
+    server: "smtp.company.com"
+    port: 587
+    tls: true
+    from: "ldap-sync-alerts@company.com"
+    to: "it-team@company.com,security-team@company.com"
+
+# Enable persistent storage for production logs
+persistence:
+  enabled: true
+  storageClass: "fast-ssd"
+  accessMode: ReadWriteOnce
+  size: 10Gi
+  annotations:
+    backup.company.com/enabled: "true"
+
+# Use existing secrets (managed by CI/CD or external secret management)
+secrets:
+  create: false
+  existingSecret: "ldap-sync-secrets"
+
+# Production node selection and resource management
+nodeSelector:
+  workload-type: "batch"
+
+tolerations:
+  - key: "batch-workload"
+    operator: "Equal"
+    value: "true"
+    effect: "NoSchedule"
+
+affinity:
+  nodeAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        preference:
+          matchExpressions:
+            - key: "zone"
+              operator: In
+              values: ["us-east-1a", "us-east-1b"]
+
+# Additional security configurations
+pod:
+  annotations:
+    vault.hashicorp.com/agent-inject: "true"
+    vault.hashicorp.com/role: "ldap-sync"
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    fsGroup: 10001
+    seccompProfile:
+      type: RuntimeDefault
+
+container:
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+
+# Service account with specific annotations for production
+serviceAccount:
+  create: true
+  annotations:
+    eks.amazonaws.com/role-arn: "arn:aws:iam::123456789012:role/ldap-sync-role"
+
+# Additional environment variables for production
+extraEnvVars:
+  - name: ENV
+    value: "production"
+  - name: TZ
+    value: "America/New_York"
+  - name: PYTHONOPTIMIZE
+    value: "2"
