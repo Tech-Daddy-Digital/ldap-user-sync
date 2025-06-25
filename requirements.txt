@@ -9,7 +9,14 @@ cryptography>=3.4.8
 pyjks>=20.0.0
 
 # Development and testing dependencies (optional)
-# pytest>=7.0.0
-# pytest-cov>=4.0.0
-# flake8>=5.0.0
-# black>=22.0.0
+pytest>=7.0.0
+pytest-cov>=4.0.0
+pytest-mock>=3.10.0
+
+# Code quality tools (optional)
+flake8>=5.0.0
+black>=22.0.0
+
+# Documentation (optional)
+sphinx>=5.0.0
+sphinx-rtd-theme>=1.2.0

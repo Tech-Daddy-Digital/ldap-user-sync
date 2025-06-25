@@ -203,8 +203,8 @@ def check_dependencies():
     
     # Check pyjks
     try:
-        import pyjks
-        print(f"✓ pyjks library available (version: {pyjks.__version__})")
+        import jks
+        print(f"✓ pyjks library available (version: {jks.__version__})")
     except ImportError:
         print("⚠ pyjks library not available (required for JKS support)")
         print("  Note: JKS support can be added by installing: pip install pyjks")

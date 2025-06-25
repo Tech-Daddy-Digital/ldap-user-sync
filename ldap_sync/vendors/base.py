@@ -102,25 +102,39 @@ class VendorAPIBase(ABC):
                 logger.info(f"Loaded PEM truststore: {truststore_file}")
             
             elif truststore_type == 'JKS':
-                # Handle JKS truststore using pyjks
+                # Handle JKS truststore using jks (pyjks package)
                 try:
-                    import pyjks
-                    keystore = pyjks.KeyStore.load(truststore_file, truststore_password)
+                    import jks
+                    keystore = jks.KeyStore.load(truststore_file, truststore_password)
                     
-                    # Extract certificates and create temporary PEM data
-                    ca_certs = []
+                    # Extract certificates and convert to PEM format
+                    ca_certs_pem = []
                     for alias, cert in keystore.certs.items():
-                        ca_certs.append(cert.cert)
+                        # Convert DER to PEM format using cryptography
+                        try:
+                            from cryptography import x509
+                            from cryptography.hazmat.primitives import serialization
+                            
+                            # Parse the DER certificate
+                            cert_obj = x509.load_der_x509_certificate(cert.cert)
+                            # Convert to PEM
+                            pem_data = cert_obj.public_bytes(serialization.Encoding.PEM)
+                            ca_certs_pem.append(pem_data)
+                        except Exception as e:
+                            logger.warning(f"Failed to convert certificate {alias} to PEM: {e}")
+                            continue
                     
-                    if ca_certs:
-                        # Convert to PEM format and load
-                        ca_data = b'\n'.join(ca_certs)
+                    if ca_certs_pem:
+                        # Combine all PEM certificates
+                        ca_data = b'\n'.join(ca_certs_pem)
                         self.ssl_context.load_verify_locations(cadata=ca_data)
-                        logger.info(f"Loaded JKS truststore: {truststore_file}")
+                        logger.info(f"Loaded JKS truststore: {truststore_file} ({len(ca_certs_pem)} certificates)")
+                    else:
+                        logger.warning(f"No valid certificates found in JKS truststore: {truststore_file}")
                     
                 except ImportError:
-                    logger.error("pyjks library not available for JKS truststore support")
-                    raise VendorAPIError("JKS truststore requires pyjks library")
+                    logger.error("jks library not available for JKS truststore support")
+                    raise VendorAPIError("JKS truststore requires pyjks library (import as 'jks')")
             
             elif truststore_type == 'PKCS12':
                 # Handle PKCS12 truststore using cryptography

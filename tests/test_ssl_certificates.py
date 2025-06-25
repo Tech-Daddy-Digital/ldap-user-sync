@@ -128,15 +128,21 @@ zk=
         finally:
             os.unlink(pem_file)
     
-    @patch('pyjks.KeyStore.load')
-    def test_jks_truststore_loading(self, mock_load):
+    @patch('jks.KeyStore.load')
+    @patch('cryptography.x509.load_der_x509_certificate')
+    def test_jks_truststore_loading(self, mock_x509_load, mock_load):
         """Test JKS truststore loading (mocked)."""
-        # Mock pyjks KeyStore
+        # Mock jks KeyStore
         mock_keystore = MagicMock()
         mock_cert = MagicMock()
-        mock_cert.cert = b'mock-cert-data'
+        mock_cert.cert = b'mock-der-cert-data'
         mock_keystore.certs = {'test-alias': mock_cert}
         mock_load.return_value = mock_keystore
+        
+        # Mock cryptography certificate conversion
+        mock_cert_obj = MagicMock()
+        mock_cert_obj.public_bytes.return_value = b'-----BEGIN CERTIFICATE-----\nMockCertData\n-----END CERTIFICATE-----'
+        mock_x509_load.return_value = mock_cert_obj
         
         config = self.base_config.copy()
         config['truststore_file'] = '/tmp/test.jks'
@@ -144,17 +150,18 @@ zk=
         config['truststore_password'] = 'changeit'
         
         with patch('builtins.open', create=True):
-            vendor = MockVendorAPI(config)
-            self.assertIsNotNone(vendor.ssl_context)
-            mock_load.assert_called_once()
+            with patch.object(ssl.SSLContext, 'load_verify_locations'):
+                vendor = MockVendorAPI(config)
+                self.assertIsNotNone(vendor.ssl_context)
+                mock_load.assert_called_once()
     
-    def test_jks_truststore_no_pyjks(self):
-        """Test JKS truststore when pyjks not available."""
+    def test_jks_truststore_no_jks(self):
+        """Test JKS truststore when jks not available."""
         config = self.base_config.copy()
         config['truststore_file'] = '/tmp/test.jks'
         config['truststore_type'] = 'JKS'
         
-        with patch('builtins.__import__', side_effect=ImportError("No module named 'pyjks'")):
+        with patch('builtins.__import__', side_effect=ImportError("No module named 'jks'")):
             with self.assertRaises(VendorAPIError) as cm:
                 MockVendorAPI(config)
             self.assertIn("pyjks library", str(cm.exception))

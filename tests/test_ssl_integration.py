@@ -197,7 +197,7 @@ class TestSSLIntegration(unittest.TestCase):
                     mock_keystore = MagicMock()
                     mock_keystore.certs = {'alias': mock_cert}
                     
-                    with patch('pyjks.KeyStore.load', return_value=mock_keystore):
+                    with patch('jks.KeyStore.load', return_value=mock_keystore):
                         with patch.object(ssl.SSLContext, 'load_verify_locations'):
                             vendor = MockVendorAPI(config)
                             self.assertIsNotNone(vendor.ssl_context)
