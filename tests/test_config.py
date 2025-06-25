@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 """
-Test script for configuration loading and validation.
+Unit tests for configuration module.
 
-This script tests various configuration scenarios to ensure the config loader
-works correctly with valid configs, handles errors gracefully, and properly
-applies environment variable overrides.
+This module provides comprehensive unit tests for the configuration loading,
+validation, and environment variable override functionality.
 """
 
 import os
 import sys
 import tempfile
 import yaml
+import unittest
+from unittest.mock import patch, mock_open
 from typing import Dict, Any
 
 # Add the project directory to the path so we can import our modules
@@ -19,14 +20,71 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from ldap_sync.config import ConfigLoader, ConfigurationError, load_config
 
 
-def create_test_config(config_data: Dict[str, Any]) -> str:
-    """Create a temporary config file with the given data."""
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
-        yaml.safe_dump(config_data, f)
-        return f.name
+class TestConfigLoader(unittest.TestCase):
+    """Test cases for ConfigLoader class."""
 
+    def setUp(self):
+        """Set up test fixtures."""
+        self.valid_config = {
+            'ldap': {
+                'server_url': 'ldaps://ldap.example.com:636',
+                'bind_dn': 'CN=Service,DC=example,DC=com',
+                'bind_password': 'password',
+                'user_base_dn': 'OU=Users,DC=example,DC=com',
+                'user_filter': '(objectClass=person)',
+                'attributes': ['cn', 'givenName', 'sn', 'mail', 'sAMAccountName']
+            },
+            'vendor_apps': [
+                {
+                    'name': 'TestApp1',
+                    'module': 'vendor_app1',
+                    'base_url': 'https://api.testapp1.com/v1',
+                    'auth': {
+                        'method': 'basic',
+                        'username': 'testuser',
+                        'password': 'testpass'
+                    },
+                    'format': 'json',
+                    'verify_ssl': True,
+                    'groups': [
+                        {
+                            'ldap_group': 'CN=TestGroup,OU=Groups,DC=example,DC=com',
+                            'vendor_group': 'test_group'
+                        }
+                    ]
+                }
+            ],
+            'logging': {
+                'level': 'INFO',
+                'log_dir': 'logs',
+                'rotation': 'daily',
+                'retention_days': 7
+            },
+            'error_handling': {
+                'max_retries': 3,
+                'retry_wait_seconds': 5,
+                'max_errors_per_vendor': 5
+            },
+            'notifications': {
+                'enable_email': True,
+                'email_on_failure': True,
+                'smtp_server': 'smtp.example.com',
+                'smtp_port': 587,
+                'smtp_tls': True,
+                'smtp_username': 'alerts@example.com',
+                'smtp_password': 'smtppass',
+                'email_from': 'alerts@example.com',
+                'email_to': ['admin@example.com']
+            }
+        }
 
-def test_valid_config():
+    def create_test_config(self, config_data: Dict[str, Any]) -> str:
+        """Create a temporary config file with the given data."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+            yaml.safe_dump(config_data, f)
+            return f.name
+
+    def test_valid_config(self):
     """Test loading a valid configuration."""
     print("Testing valid configuration...")
     
